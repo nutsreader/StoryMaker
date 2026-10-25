@@ -1,22 +1,26 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Plus,
   Trash2,
-  Copy,
   Users,
   Sliders,
   Sparkles,
   CheckCircle,
   Loader2,
+  Mic,
+  Play,
+  Pause,
+  ChevronDown,
 } from 'lucide-react';
 import { Block, VoiceItem } from '@/types';
+import { VoicePickerModal } from './VoicePickerModal';
 
 interface StudioViewProps {
   blocks: Block[];
   setBlocks: React.Dispatch<React.SetStateAction<Block[]>>;
-  voices: VoiceItem[]; // <-- Kukunin ang live list ng boses
+  voices: VoiceItem[];
   showToast: (msg: string) => void;
 }
 
@@ -26,6 +30,11 @@ export const StudioView: React.FC<StudioViewProps> = ({
   voices,
   showToast,
 }) => {
+  // Voice Picker Modal State
+  const [pickerTarget, setPickerTarget] = useState<'bulk' | string | null>(null);
+  const [playingPreviewUrl, setPlayingPreviewUrl] = useState<string | null>(null);
+  const audioPreviewRef = useRef<HTMLAudioElement | null>(null);
+
   // Bulk Assign
   const [bulkTag, setBulkTag] = useState('');
   const [bulkVoiceId, setBulkVoiceId] = useState('');
@@ -61,9 +70,30 @@ export const StudioView: React.FC<StudioViewProps> = ({
     );
   };
 
+  // Mini preview player para sa napiling boses sa block
+  const playBlockVoicePreview = (previewUrl: string) => {
+    if (playingPreviewUrl === previewUrl) {
+      audioPreviewRef.current?.pause();
+      setPlayingPreviewUrl(null);
+      return;
+    }
+
+    if (audioPreviewRef.current) {
+      audioPreviewRef.current.pause();
+    }
+
+    const audio = new Audio(previewUrl);
+    audioPreviewRef.current = audio;
+    setPlayingPreviewUrl(previewUrl);
+
+    audio.play().catch(() => setPlayingPreviewUrl(null));
+    audio.onended = () => setPlayingPreviewUrl(null);
+    audio.onerror = () => setPlayingPreviewUrl(null);
+  };
+
   const applyBulkVoice = () => {
     if (!bulkVoiceId.trim()) {
-      showToast('Pumili ng boses sa dropdown muna.');
+      showToast('Pumili muna ng boses para sa bulk assign.');
       return;
     }
     const tag = bulkTag.trim().toLowerCase();
@@ -84,7 +114,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
     const valid = blocks.filter((b) => b.dialogue.trim() && b.voiceId.trim());
 
     if (valid.length === 0) {
-      showToast('Pumili ng boses at maglagay ng dialogue sa blocks bago mag-synthesize.');
+      showToast('Pumili ng boses at maglagay ng dialogue sa blocks.');
       return;
     }
 
@@ -133,6 +163,14 @@ export const StudioView: React.FC<StudioViewProps> = ({
     }
   };
 
+  // Kukunin ang currently selected voice id para sa picker
+  const currentPickingVoiceId =
+    pickerTarget === 'bulk'
+      ? bulkVoiceId
+      : blocks.find((b) => b.id === pickerTarget)?.voiceId || '';
+
+  const bulkVoiceObject = voices.find((v) => v.id === bulkVoiceId);
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* SCRIPT BLOCKS */}
@@ -141,7 +179,9 @@ export const StudioView: React.FC<StudioViewProps> = ({
           <div className="flex items-center justify-between pb-4 border-b border-[#202a40] mb-4">
             <div>
               <h2 className="text-sm font-bold">Dialogue Blocks</h2>
-              <p className="text-[11px] text-[#8f9bb5]">Pumili ng boses sa dropdown para sa bawat linya.</p>
+              <p className="text-[11px] text-[#8f9bb5]">
+                Piliin at pakinggan ang boses para sa bawat linya.
+              </p>
             </div>
             <span className="text-[11px] font-mono px-2.5 py-1 rounded-full bg-[#19172e] text-[#c29aff] border border-[#a354ff]/30">
               {blocks.length} BLOCKS
@@ -149,79 +189,88 @@ export const StudioView: React.FC<StudioViewProps> = ({
           </div>
 
           <div className="space-y-3.5">
-            {blocks.map((block, idx) => (
-              <div
-                key={block.id}
-                className="bg-[#0b101c] border border-[#202a40] rounded-xl p-3.5 space-y-2.5"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="w-6 h-6 flex-none rounded-lg bg-[#2a1d42] text-[#d6b9ff] text-xs font-bold flex items-center justify-center font-mono">
-                    {idx + 1}
-                  </span>
+            {blocks.map((block, idx) => {
+              const matchedVoice = voices.find((v) => v.id === block.voiceId);
 
-                  {/* Speaker Tag Input */}
-                  <input
-                    type="text"
-                    value={block.name}
-                    onChange={(e) => updateBlock(block.id, 'name', e.target.value)}
-                    placeholder="Speaker Tag"
-                    className="flex-1 min-w-0 bg-[#080d17] border border-[#222c42] rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#a354ff]"
-                  />
+              return (
+                <div
+                  key={block.id}
+                  className="bg-[#0b101c] border border-[#202a40] rounded-xl p-3.5 space-y-2.5"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 flex-none rounded-lg bg-[#2a1d42] text-[#d6b9ff] text-xs font-bold flex items-center justify-center font-mono">
+                      {idx + 1}
+                    </span>
 
-                  {/* 🎙️ VOICE DROPDOWN (Pinalitan ang raw ID input) */}
-                  <div className="flex-1 min-w-0 flex items-center gap-1">
-                    <select
-                      value={block.voiceId}
-                      onChange={(e) => updateBlock(block.id, 'voiceId', e.target.value)}
-                      className="w-full bg-[#080d17] border border-[#222c42] rounded-lg px-2.5 py-1.5 text-xs text-[#4dd6a2] font-medium focus:outline-none focus:border-[#a354ff] truncate"
-                    >
-                      <option value="" className="text-[#8f9bb5]">
-                        Select voice
-                      </option>
-                      {voices.map((v) => (
-                        <option key={v.id} value={v.id} className="bg-[#0d1220] text-white">
-                          {v.name} {v.category ? `(${v.category})` : ''}
-                        </option>
-                      ))}
-                      {/* Fallback kung may Voice ID na wala sa dropdown list */}
-                      {block.voiceId && !voices.some((v) => v.id === block.voiceId) && (
-                        <option value={block.voiceId} className="bg-[#0d1220] text-[#4dd6a2]">
-                          Saved ID: {block.voiceId}
-                        </option>
+                    {/* Speaker Tag Input */}
+                    <input
+                      type="text"
+                      value={block.name}
+                      onChange={(e) => updateBlock(block.id, 'name', e.target.value)}
+                      placeholder="Speaker Tag"
+                      className="flex-1 min-w-0 bg-[#080d17] border border-[#222c42] rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#a354ff]"
+                    />
+
+                    {/* 🎙️ CUSTOM VOICE SELECTOR PILL (May Play button & Modal trigger) */}
+                    <div className="flex-1 min-w-0 flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setPickerTarget(block.id)}
+                        className={`flex-1 min-w-0 flex items-center justify-between gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition truncate ${
+                          matchedVoice
+                            ? 'bg-[#111c2e] border-[#22446a] text-[#4dd6a2]'
+                            : 'bg-[#080d17] border-[#222c42] text-[#8f9bb5] hover:border-[#a354ff]'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 truncate">
+                          <Mic className="w-3.5 h-3.5 text-[#a354ff] flex-none" />
+                          <span className="truncate">
+                            {matchedVoice ? matchedVoice.name : 'Select voice'}
+                          </span>
+                        </div>
+                        <ChevronDown className="w-3.5 h-3.5 text-[#8f9bb5] flex-none" />
+                      </button>
+
+                      {/* Mini Play Preview Button sa Block */}
+                      {matchedVoice?.previewUrl && (
+                        <button
+                          type="button"
+                          onClick={() => playBlockVoicePreview(matchedVoice.previewUrl!)}
+                          className={`p-1.5 rounded-lg border transition ${
+                            playingPreviewUrl === matchedVoice.previewUrl
+                              ? 'bg-[#a354ff] text-white border-[#a354ff]'
+                              : 'bg-[#12192a] hover:bg-[#1a233a] border-[#202a40] text-[#c29aff]'
+                          }`}
+                          title="Listen to this voice sample"
+                        >
+                          {playingPreviewUrl === matchedVoice.previewUrl ? (
+                            <Pause className="w-3.5 h-3.5" />
+                          ) : (
+                            <Play className="w-3.5 h-3.5" />
+                          )}
+                        </button>
                       )}
-                    </select>
+                    </div>
 
                     <button
-                      onClick={() => {
-                        if (!block.voiceId) return showToast('Pumili muna ng boses');
-                        navigator.clipboard.writeText(block.voiceId);
-                        showToast('Voice ID copied');
-                      }}
-                      className="p-1.5 text-[#8f9bb5] hover:text-white bg-[#12192a] border border-[#202a40] rounded-lg"
-                      title="Copy raw Voice ID"
+                      onClick={() => removeBlock(block.id)}
+                      className="p-1.5 text-red-400 hover:text-red-300 bg-[#12192a] border border-[#202a40] rounded-lg"
+                      title="Delete Block"
                     >
-                      <Copy className="w-3.5 h-3.5" />
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
 
-                  <button
-                    onClick={() => removeBlock(block.id)}
-                    className="p-1.5 text-red-400 hover:text-red-300 bg-[#12192a] border border-[#202a40] rounded-lg"
-                    title="Delete Block"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  <textarea
+                    rows={2}
+                    value={block.dialogue}
+                    onChange={(e) => updateBlock(block.id, 'dialogue', e.target.value)}
+                    placeholder="I-type dito ang dialogue..."
+                    className="w-full bg-[#080d17] border border-[#222c42] rounded-lg p-2.5 text-xs leading-relaxed text-white focus:outline-none focus:border-[#a354ff] resize-y"
+                  />
                 </div>
-
-                <textarea
-                  rows={2}
-                  value={block.dialogue}
-                  onChange={(e) => updateBlock(block.id, 'dialogue', e.target.value)}
-                  placeholder="I-type dito ang dialogue..."
-                  className="w-full bg-[#080d17] border border-[#222c42] rounded-lg p-2.5 text-xs leading-relaxed text-white focus:outline-none focus:border-[#a354ff] resize-y"
-                />
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="flex items-center justify-between pt-4 mt-4 border-t border-[#202a40]">
@@ -243,7 +292,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
           </div>
         </div>
 
-        {/* Bulk Assignment with Dropdown */}
+        {/* Bulk Assignment with Custom Voice Picker */}
         <div className="bg-[#0d1220] border border-[#202a40] rounded-2xl p-5 space-y-3">
           <div className="flex items-center gap-2">
             <Users className="w-4 h-4 text-[#a354ff]" />
@@ -257,20 +306,19 @@ export const StudioView: React.FC<StudioViewProps> = ({
               onChange={(e) => setBulkTag(e.target.value)}
               className="bg-[#080d17] border border-[#222c42] rounded-xl px-3 py-2 text-xs text-white"
             />
-            {/* Dropdown din para sa Bulk Assignment */}
-            <select
-              value={bulkVoiceId}
-              onChange={(e) => setBulkVoiceId(e.target.value)}
-              className="bg-[#080d17] border border-[#222c42] rounded-xl px-3 py-2 text-xs text-white"
+
+            <button
+              type="button"
+              onClick={() => setPickerTarget('bulk')}
+              className="flex items-center justify-between px-3 py-2 bg-[#080d17] border border-[#222c42] rounded-xl text-xs text-left"
             >
-              <option value="">Select voice to bulk assign...</option>
-              {voices.map((v) => (
-                <option key={v.id} value={v.id} className="bg-[#0d1220] text-white">
-                  {v.name} {v.category ? `(${v.category})` : ''}
-                </option>
-              ))}
-            </select>
+              <span className={bulkVoiceObject ? 'text-[#4dd6a2] font-semibold' : 'text-[#8f9bb5]'}>
+                {bulkVoiceObject ? bulkVoiceObject.name : 'Select bulk voice...'}
+              </span>
+              <ChevronDown className="w-4 h-4 text-[#8f9bb5]" />
+            </button>
           </div>
+
           <button
             onClick={applyBulkVoice}
             className="w-full py-2 bg-[#11182a] hover:bg-[#1a233a] border border-[#202a40] rounded-xl text-xs font-bold text-white transition"
@@ -385,6 +433,21 @@ export const StudioView: React.FC<StudioViewProps> = ({
           )}
         </div>
       </div>
+
+      {/* 🚀 CUSTOM VOICE PICKER MODAL */}
+      <VoicePickerModal
+        isOpen={pickerTarget !== null}
+        onClose={() => setPickerTarget(null)}
+        voices={voices}
+        selectedVoiceId={currentPickingVoiceId}
+        onSelectVoice={(voiceId) => {
+          if (pickerTarget === 'bulk') {
+            setBulkVoiceId(voiceId);
+          } else if (pickerTarget) {
+            updateBlock(pickerTarget, 'voiceId', voiceId);
+          }
+        }}
+      />
     </div>
   );
 };
