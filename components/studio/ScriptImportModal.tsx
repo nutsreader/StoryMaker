@@ -1,14 +1,25 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { FileText, X, Sparkles, Check, Users } from 'lucide-react';
+import {
+  FileText,
+  X,
+  Sparkles,
+  Check,
+  Users,
+  Mic,
+  Play,
+  Pause,
+  ChevronDown,
+} from 'lucide-react';
 import { Block, PresetItem, VoiceItem } from '@/types';
+import { VoicePickerModal } from './VoicePickerModal';
 
 interface ScriptImportModalProps {
   isOpen: boolean;
   onClose: () => void;
   presets: PresetItem[];
-  voices: VoiceItem[]; // <-- Kukunin ang listahan ng live boses
+  voices: VoiceItem[];
   onApplyBlocks: (blocks: Block[]) => void;
   showToast: (msg: string) => void;
 }
@@ -26,14 +37,45 @@ export const ScriptImportModal: React.FC<ScriptImportModalProps> = ({
   const [scriptText, setScriptText] = useState('');
   const [fileName, setFileName] = useState('');
   const [statusMessage, setStatusMessage] = useState('');
-  
-  // 👥 Natukoy na unique characters at ang kanilang assigned voices
-  const [detectedCharacters, setDetectedCharacters] = useState<{ name: string; count: number }[]>([]);
+
+  // 👥 Natukoy na unique characters
+  const [detectedCharacters, setDetectedCharacters] = useState<
+    { name: string; count: number }[]
+  >([]);
   const [charVoiceMap, setCharVoiceMap] = useState<Record<string, string>>({});
 
+  // 🎙️ Voice Picker Modal para sa bawat karakter
+  const [activePickingChar, setActivePickingChar] = useState<string | null>(null);
+
+  // 🔊 Audio player para sa mini-play preview sa card
+  const [playingPreviewUrl, setPlayingPreviewUrl] = useState<string | null>(null);
+  const cardAudioRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
+
+  // Mini preview player para sa boses ng karakter sa card
+  const playCardPreview = (e: React.MouseEvent, previewUrl: string) => {
+    e.stopPropagation();
+
+    if (playingPreviewUrl === previewUrl) {
+      cardAudioRef.current?.pause();
+      setPlayingPreviewUrl(null);
+      return;
+    }
+
+    if (cardAudioRef.current) {
+      cardAudioRef.current.pause();
+    }
+
+    const audio = new Audio(previewUrl);
+    cardAudioRef.current = audio;
+    setPlayingPreviewUrl(previewUrl);
+
+    audio.play().catch(() => setPlayingPreviewUrl(null));
+    audio.onended = () => setPlayingPreviewUrl(null);
+    audio.onerror = () => setPlayingPreviewUrl(null);
+  };
 
   // Smart Parser
   const parseScriptLines = (raw: string) => {
@@ -52,7 +94,10 @@ export const ScriptImportModal: React.FC<ScriptImportModalProps> = ({
           if (currentBlock) {
             currentBlock.dialogue += ` [${potentialTag}] ${restOfLine}`.trim();
           } else {
-            currentBlock = { name: 'NARRATOR', dialogue: `[${potentialTag}] ${restOfLine}`.trim() };
+            currentBlock = {
+              name: 'NARRATOR',
+              dialogue: `[${potentialTag}] ${restOfLine}`.trim(),
+            };
             parsed.push(currentBlock);
           }
           continue;
@@ -87,7 +132,7 @@ export const ScriptImportModal: React.FC<ScriptImportModalProps> = ({
     return parsed.filter((p) => p.dialogue.trim());
   };
 
-  // ✦ AUTO-FORMAT: Kukunin ang unique characters at gagawa ng cards
+  // ✦ AUTO-FORMAT
   const handleAutoFormat = () => {
     if (!scriptText.trim()) {
       setStatusMessage('Mag-upload o mag-paste muna ng script.');
@@ -100,7 +145,6 @@ export const ScriptImportModal: React.FC<ScriptImportModalProps> = ({
       return;
     }
 
-    // Bilangin kung ilang beses nagsasalita ang bawat character
     const counts: Record<string, number> = {};
     parsed.forEach((p) => {
       counts[p.name] = (counts[p.name] || 0) + 1;
@@ -113,7 +157,6 @@ export const ScriptImportModal: React.FC<ScriptImportModalProps> = ({
 
     setDetectedCharacters(charactersList);
 
-    // Kusa nang ikabit ang Voice ID kung may kaparehong pangalan sa Supabase presets
     const initialMap: Record<string, string> = { ...charVoiceMap };
     charactersList.forEach((char) => {
       if (!initialMap[char.name]) {
@@ -125,17 +168,16 @@ export const ScriptImportModal: React.FC<ScriptImportModalProps> = ({
     });
     setCharVoiceMap(initialMap);
 
-    // I-format ang preview text
     const formatted = parsed.map((p) => `[${p.name}]\n${p.dialogue}`).join('\n\n');
     setScriptText(formatted);
 
     setStatusMessage(
-      `✓ Natukoy ang ${parsed.length} blocks mula sa ${charactersList.length} unique character(s). Piliin ang boses sa cards sa ibaba!`
+      `✓ Natukoy ang ${parsed.length} blocks mula sa ${charactersList.length} character(s). Piliin at pakinggan ang boses sa cards sa ibaba!`
     );
     showToast('Characters detected!');
   };
 
-  // 🚀 APPLY TO STUDIO: I-a-apply ang napiling boses sa lahat ng turns ng karakter
+  // 🚀 APPLY TO STUDIO
   const handleApplyToStudio = () => {
     if (!scriptText.trim()) {
       setStatusMessage('Mag-paste o mag-load muna ng script.');
@@ -149,9 +191,7 @@ export const ScriptImportModal: React.FC<ScriptImportModalProps> = ({
     }
 
     const finalBlocks: Block[] = parsed.map((item, index) => {
-      // Kunin ang boses mula sa character voice mapping card
       const assignedVoiceId = charVoiceMap[item.name] || '';
-
       return {
         id: (Date.now() + index).toString(),
         name: item.name,
@@ -160,9 +200,10 @@ export const ScriptImportModal: React.FC<ScriptImportModalProps> = ({
       };
     });
 
+    if (cardAudioRef.current) cardAudioRef.current.pause();
     onApplyBlocks(finalBlocks);
     onClose();
-    showToast(`✓ Na-apply ang ${finalBlocks.length} blocks kasama ang boses ng bawat karakter!`);
+    showToast(`✓ Na-apply ang ${finalBlocks.length} blocks kasama ang napiling boses!`);
   };
 
   return (
@@ -177,11 +218,17 @@ export const ScriptImportModal: React.FC<ScriptImportModalProps> = ({
             <div>
               <h3 className="text-sm font-bold text-white">Import Script & Bulk Character Voices</h3>
               <p className="text-[10px] text-[#8f9bb5]">
-                Auto-detect characters at i-assign ang boses ng bawat isa nang minsanan.
+                Pakinggan at i-assign ang boses ng bawat karakter nang minsanan.
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="text-[#8f9bb5] hover:text-white p-1">
+          <button
+            onClick={() => {
+              if (cardAudioRef.current) cardAudioRef.current.pause();
+              onClose();
+            }}
+            className="text-[#8f9bb5] hover:text-white p-1"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -225,7 +272,7 @@ export const ScriptImportModal: React.FC<ScriptImportModalProps> = ({
             SCRIPT PREVIEW / EDITOR
           </label>
           <textarea
-            rows={6}
+            rows={5}
             value={scriptText}
             onChange={(e) => setScriptText(e.target.value)}
             placeholder="I-paste dito ang script..."
@@ -238,7 +285,7 @@ export const ScriptImportModal: React.FC<ScriptImportModalProps> = ({
           )}
         </div>
 
-        {/* 🎭 BAGONG CARDS: CHARACTER VOICE BULK ASSIGNMENT */}
+        {/* 🎭 MODERN CARDS: CHARACTER VOICE ASSIGNMENT (WALANG LUMANG SELECT) */}
         {detectedCharacters.length > 0 && (
           <div className="p-3.5 bg-[#080d17] border border-[#202a40] rounded-xl space-y-3">
             <div className="flex items-center justify-between">
@@ -247,50 +294,76 @@ export const ScriptImportModal: React.FC<ScriptImportModalProps> = ({
                 <span>NATUKOY NA CHARACTERS ({detectedCharacters.length})</span>
               </div>
               <span className="text-[10px] text-[#4dd6a2]">
-                Isang pili lang, automatic ia-apply sa lahat ng linya nila
+                Piliin at pakinggan ang boses ng bawat isa
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-52 overflow-y-auto pr-1">
-              {detectedCharacters.map((char) => (
-                <div
-                  key={char.name}
-                  className="p-3 bg-[#0d1220] border border-[#202a40] rounded-xl flex items-center justify-between gap-2"
-                >
-                  <div className="min-w-0 flex-1">
-                    <span className="text-xs font-bold text-white block truncate">
-                      {char.name}
-                    </span>
-                    <span className="text-[10px] text-[#8f9bb5] font-mono">
-                      {char.count} lines / dialogue turns
-                    </span>
-                  </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-56 overflow-y-auto pr-1">
+              {detectedCharacters.map((char) => {
+                const assignedVoiceId = charVoiceMap[char.name];
+                const matchedVoice = voices.find((v) => v.id === assignedVoiceId);
 
-                  {/* Dropdown ng boses para sa karakter na ito */}
-                  <select
-                    value={charVoiceMap[char.name] || ''}
-                    onChange={(e) =>
-                      setCharVoiceMap((prev) => ({
-                        ...prev,
-                        [char.name]: e.target.value,
-                      }))
-                    }
-                    className="max-w-[150px] bg-[#080d17] border border-[#222c42] rounded-lg px-2.5 py-1.5 text-xs text-[#4dd6a2] font-semibold focus:outline-none focus:border-[#a354ff] truncate"
+                return (
+                  <div
+                    key={char.name}
+                    className="p-3 bg-[#0d1220] border border-[#202a40] rounded-xl flex items-center justify-between gap-2"
                   >
-                    <option value="">Select voice...</option>
-                    {voices.map((v) => (
-                      <option key={v.id} value={v.id} className="bg-[#0d1220] text-white">
-                        {v.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ))}
+                    <div className="min-w-0 flex-1">
+                      <span className="text-xs font-bold text-white block truncate">
+                        {char.name}
+                      </span>
+                      <span className="text-[10px] text-[#8f9bb5] font-mono">
+                        {char.count} lines
+                      </span>
+                    </div>
+
+                    {/* 🎙️ Modern Voice Picker Button + Mini Play Button */}
+                    <div className="flex items-center gap-1.5 flex-none">
+                      {/* Play Audio Sample sa Card */}
+                      {matchedVoice?.previewUrl && (
+                        <button
+                          type="button"
+                          onClick={(e) => playCardPreview(e, matchedVoice.previewUrl!)}
+                          className={`p-1.5 rounded-lg border transition ${
+                            playingPreviewUrl === matchedVoice.previewUrl
+                              ? 'bg-[#a354ff] text-white border-[#a354ff]'
+                              : 'bg-[#12192a] hover:bg-[#1a233a] border-[#202a40] text-[#c29aff]'
+                          }`}
+                          title="Pakinggan ang boses"
+                        >
+                          {playingPreviewUrl === matchedVoice.previewUrl ? (
+                            <Pause className="w-3.5 h-3.5" />
+                          ) : (
+                            <Play className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      )}
+
+                      {/* Custom Voice Trigger Pill */}
+                      <button
+                        type="button"
+                        onClick={() => setActivePickingChar(char.name)}
+                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition max-w-[135px] truncate ${
+                          matchedVoice
+                            ? 'bg-[#111c2e] border-[#22446a] text-[#4dd6a2]'
+                            : 'bg-[#080d17] border-[#222c42] text-[#8f9bb5] hover:border-[#a354ff]'
+                        }`}
+                      >
+                        <Mic className="w-3 h-3 text-[#a354ff] flex-none" />
+                        <span className="truncate">
+                          {matchedVoice ? matchedVoice.name : 'Select voice'}
+                        </span>
+                        <ChevronDown className="w-3 h-3 text-[#8f9bb5] flex-none" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
 
-        {/* Footer Actions */}
+        {/* Footer */}
         <div className="flex items-center justify-between pt-3 border-t border-[#202a40]">
           <button
             onClick={handleAutoFormat}
@@ -302,7 +375,10 @@ export const ScriptImportModal: React.FC<ScriptImportModalProps> = ({
 
           <div className="flex items-center gap-2">
             <button
-              onClick={onClose}
+              onClick={() => {
+                if (cardAudioRef.current) cardAudioRef.current.pause();
+                onClose();
+              }}
               className="px-3.5 py-2 bg-[#11182a] hover:bg-[#1a233a] border border-[#202a40] text-xs font-bold rounded-xl text-[#8f9bb5]"
             >
               Cancel
@@ -317,6 +393,22 @@ export const ScriptImportModal: React.FC<ScriptImportModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* 🚀 CUSTOM VOICE PICKER MODAL (May Play Preview sa bawat boses) */}
+      <VoicePickerModal
+        isOpen={activePickingChar !== null}
+        onClose={() => setActivePickingChar(null)}
+        voices={voices}
+        selectedVoiceId={activePickingChar ? charVoiceMap[activePickingChar] || '' : ''}
+        onSelectVoice={(voiceId) => {
+          if (activePickingChar) {
+            setCharVoiceMap((prev) => ({
+              ...prev,
+              [activePickingChar]: voiceId,
+            }));
+          }
+        }}
+      />
     </div>
   );
 };
