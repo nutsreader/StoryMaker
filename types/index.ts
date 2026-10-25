@@ -19,4 +19,11 @@ export interface PresetItem {
   voice_id: string;
 }
 
+export interface UserCredits {
+  character_count: number;
+  character_limit: number;
+  remaining_credits: number;
+  tier: string;
+}
+
 export type ActiveTab = 'studio' | 'voices';

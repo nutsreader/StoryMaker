@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Sliders, Volume2, X } from 'lucide-react';
-import { ActiveTab } from '@/types';
+import { ActiveTab, UserCredits } from '@/types';
 
 interface SidebarProps {
   activeTab: ActiveTab;
@@ -10,6 +10,7 @@ interface SidebarProps {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
   voiceCount: number;
+  credits: UserCredits | null;
 }
 
 export const Sidebar: React.FC < SidebarProps > = ({
@@ -18,7 +19,13 @@ export const Sidebar: React.FC < SidebarProps > = ({
   isOpen,
   setIsOpen,
   voiceCount,
+  credits,
 }) => {
+  // Compute percentage used
+  const percentUsed = credits && credits.character_limit > 0 ?
+    Math.min(100, (credits.character_count / credits.character_limit) * 100) :
+    0;
+  
   return (
     <aside
       className={`fixed inset-y-0 left-0 z-40 w-64 bg-[#0a0e18] border-r border-[#202a40] p-5 flex flex-col justify-between transform transition-transform duration-200 md:static md:translate-x-0 ${
@@ -42,7 +49,7 @@ export const Sidebar: React.FC < SidebarProps > = ({
           </button>
         </div>
 
-        {/* Navigation Options */}
+        {/* Workspace Nav */}
         <div className="text-[10px] font-bold text-[#77839c] tracking-widest px-3 mb-2">
           WORKSPACE
         </div>
@@ -77,15 +84,40 @@ export const Sidebar: React.FC < SidebarProps > = ({
         </nav>
       </div>
 
-      {/* Engine Status Footer */}
-      <div className="p-3.5 bg-[#0d1220] border border-[#202a40] rounded-2xl">
-        <div className="flex items-center justify-between text-xs mb-1">
-          <span className="font-bold text-[#8f9bb5]">ElevenLabs Engine</span>
-          <span className="text-[10px] text-[#4dd6a2] font-mono">Server-Side</span>
+      {/* 📊 TOTAL CREDITS & QUOTA CARD SA BABA NG SIDEBAR */}
+      <div className="p-4 bg-[#0d1220] border border-[#202a40] rounded-2xl space-y-2.5">
+        <div className="flex items-center justify-between text-[11px]">
+          <span className="font-bold text-[#8f9bb5]">Plan Tier:</span>
+          <span className="px-2 py-0.5 rounded-md bg-[#19172e] text-[#c29aff] font-mono font-bold text-[10px]">
+            {credits?.tier || 'CONNECTED'}
+          </span>
         </div>
-        <p className="text-[11px] text-[#77839c] leading-relaxed">
-          Direct stream sa device mo. Zero Supabase audio storage consumed.
-        </p>
+
+        <div className="space-y-1">
+          <div className="flex justify-between text-[11px] text-[#8f9bb5]">
+            <span>Quota Remaining:</span>
+            <span className="font-mono text-white font-semibold">
+              {credits
+                ? `${credits.remaining_credits.toLocaleString()} / ${credits.character_limit.toLocaleString()}`
+                : 'Loading...'}
+            </span>
+          </div>
+
+          {/* Meter progress bar */}
+          <div className="w-full h-1.5 bg-[#20283b] rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-[#a354ff] to-[#685cff] transition-all duration-300"
+              style={{ width: `${percentUsed}%` }}
+            />
+          </div>
+        </div>
+
+        <div className="pt-2 border-t border-[#202a40] flex items-center justify-between text-[10px] text-[#77839c]">
+          <span>Engine Status</span>
+          <span className="text-[#4dd6a2] font-semibold flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#4dd6a2] animate-pulse" /> Connected
+          </span>
+        </div>
       </div>
     </aside>
   );
