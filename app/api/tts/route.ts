@@ -1,101 +1,73 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-interface DialogueBlock {
-  speaker: string;
-  voiceId: string;
-  dialogue: string;
-}
-
 export async function POST(req: NextRequest) {
   try {
     const apiKey = process.env.ELEVENLABS_API_KEY;
 
     if (!apiKey) {
       return NextResponse.json(
-        { error: 'Missing ELEVENLABS_API_KEY in environment variables.' },
+        { error: 'Missing ELEVENLABS_API_KEY in Vercel environment variables.' },
         { status: 500 }
       );
     }
 
     const body = await req.json();
-    const { blocks, model, speed, stability, clarity } = body as {
-      blocks: DialogueBlock[];
+    const { voiceId, text, model, speed, stability, clarity } = body as {
+      voiceId: string;
+      text: string;
       model?: string;
       speed?: number;
       stability?: number;
       clarity?: number;
     };
 
-    if (!blocks || !Array.isArray(blocks) || blocks.length === 0) {
+    if (!voiceId || !text) {
       return NextResponse.json(
-        { error: 'No dialogue blocks provided.' },
+        { error: 'Voice ID and text dialogue are required.' },
         { status: 400 }
       );
     }
 
-    const audioBuffers: Buffer[] = [];
     const selectedModel = model || 'eleven_multilingual_v2';
 
-    // I-generate ang audio sa ElevenLabs per dialogue block nang sunod-sunod
-    for (const block of blocks) {
-      const text = block.dialogue.trim();
-      const voiceId = block.voiceId.trim();
-
-      if (!text || !voiceId) continue;
-
-      const response = await fetch(
-        `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'xi-api-key': apiKey,
+    const response = await fetch(
+      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'xi-api-key': apiKey,
+        },
+        body: JSON.stringify({
+          text: text.trim(),
+          model_id: selectedModel,
+          voice_settings: {
+            stability: stability ?? 0.5,
+            similarity_boost: clarity ?? 0.75,
+            speed: speed ?? 1.0,
           },
-          body: JSON.stringify({
-            text,
-            model_id: selectedModel,
-            voice_settings: {
-              stability: stability ?? 0.5,
-              similarity_boost: clarity ?? 0.75,
-              speed: speed ?? 1.0,
-            },
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`ElevenLabs error for voice ${voiceId}:`, errorText);
-        return NextResponse.json(
-          { error: `ElevenLabs API error: ${response.statusText}` },
-          { status: response.status }
-        );
+        }),
       }
+    );
 
-      const arrayBuffer = await response.arrayBuffer();
-      audioBuffers.push(Buffer.from(arrayBuffer));
-    }
-
-    if (audioBuffers.length === 0) {
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('ElevenLabs Error:', errorText);
       return NextResponse.json(
-        { error: 'Failed to generate speech. Please check your text and voice IDs.' },
-        { status: 400 }
+        { error: `ElevenLabs error (${response.status}): ${response.statusText}` },
+        { status: response.status }
       );
     }
 
-    // Pagsamahin ang lahat ng MP3 chunks sa iisang tuloy-tuloy na MP3 buffer
-    const finalAudioBuffer = Buffer.concat(audioBuffers);
+    const audioArrayBuffer = await response.arrayBuffer();
 
-    // Ibalik ang pinagsamang MP3 direkta sa browser
-    return new NextResponse(finalAudioBuffer, {
+    return new NextResponse(audioArrayBuffer, {
       headers: {
         'Content-Type': 'audio/mpeg',
-        'Content-Disposition': 'attachment; filename="storymaker_output.mp3"',
-        'Content-Length': finalAudioBuffer.length.toString(),
       },
     });
   } catch (error: any) {
-    console.error('TTS Synthesis route error:', error);
+    console.error('TTS Route Error:', error);
     return NextResponse.json(
       { error: error.message || 'Internal Server Error' },
       { status: 500 }

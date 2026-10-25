@@ -30,7 +30,6 @@ export const StudioView: React.FC<StudioViewProps> = ({
   voices,
   showToast,
 }) => {
-  // Voice Picker Modal State
   const [pickerTarget, setPickerTarget] = useState<'bulk' | string | null>(null);
   const [playingPreviewUrl, setPlayingPreviewUrl] = useState<string | null>(null);
   const audioPreviewRef = useRef<HTMLAudioElement | null>(null);
@@ -45,8 +44,10 @@ export const StudioView: React.FC<StudioViewProps> = ({
   const [stability, setStability] = useState(0.5);
   const [clarity, setClarity] = useState(0.75);
 
-  // Synthesis & Audio
+  // Generation & Progress States
   const [isGenerating, setIsGenerating] = useState(false);
+  const [progressText, setProgressText] = useState('');
+  const [progressPercent, setProgressPercent] = useState(0);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
 
   const addBlock = (name = `Speaker ${blocks.length + 1}`, voiceId = '', dialogue = '') => {
@@ -70,7 +71,6 @@ export const StudioView: React.FC<StudioViewProps> = ({
     );
   };
 
-  // Mini preview player para sa napiling boses sa block
   const playBlockVoicePreview = (previewUrl: string) => {
     if (playingPreviewUrl === previewUrl) {
       audioPreviewRef.current?.pause();
@@ -78,9 +78,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
       return;
     }
 
-    if (audioPreviewRef.current) {
-      audioPreviewRef.current.pause();
-    }
+    if (audioPreviewRef.current) audioPreviewRef.current.pause();
 
     const audio = new Audio(previewUrl);
     audioPreviewRef.current = audio;
@@ -110,60 +108,76 @@ export const StudioView: React.FC<StudioViewProps> = ({
     showToast(`Na-assign ang boses sa ${count} speaker block(s)!`);
   };
 
+  // 🚀 RELIABLE ENGINE: BATCH SYNTHESIS WITH ZERO TIMEOUTS
   const handleSynthesize = async () => {
     const valid = blocks.filter((b) => b.dialogue.trim() && b.voiceId.trim());
 
     if (valid.length === 0) {
-      showToast('Pumili ng boses at maglagay ng dialogue sa blocks.');
+      showToast('Pumili ng boses at maglagay ng dialogue sa blocks bago mag-synthesize.');
       return;
     }
 
     setIsGenerating(true);
-    showToast('✦ Pinagsasama ang audio sa ElevenLabs...');
+    setProgressPercent(0);
+    const audioBlobs: Blob[] = [];
 
     try {
-      const res = await fetch('/api/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          blocks: valid.map((b) => ({
-            speaker: b.name,
-            voiceId: b.voiceId,
-            dialogue: b.dialogue,
-          })),
-          model,
-          speed,
-          stability,
-          clarity,
-        }),
-      });
+      for (let i = 0; i < valid.length; i++) {
+        const current = valid[i];
+        const percent = Math.round(((i + 1) / valid.length) * 100);
 
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Nabigo ang synthesis.');
+        setProgressText(
+          `Generating turn ${i + 1} of ${valid.length} (${current.name})...`
+        );
+        setProgressPercent(percent);
+
+        const res = await fetch('/api/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            voiceId: current.voiceId,
+            text: current.dialogue,
+            model,
+            speed,
+            stability,
+            clarity,
+          }),
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(
+            errData.error || `Error sa block #${i + 1} (${current.name})`
+          );
+        }
+
+        const blobChunk = await res.blob();
+        audioBlobs.push(blobChunk);
       }
 
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      setAudioUrl(url);
+      // 🎵 PAGSAMAHIN ANG LAHAT NG AUDIO BLOBS SA BROWSER
+      setProgressText('Pinagsasama ang buong audio...');
+      const combinedBlob = new Blob(audioBlobs, { type: 'audio/mpeg' });
+      const finalUrl = URL.createObjectURL(combinedBlob);
+      setAudioUrl(finalUrl);
 
-      // Auto-download sa device
+      // 📥 AUTO-DOWNLOAD DIRECT SA DEVICE
       const link = document.createElement('a');
-      link.href = url;
+      link.href = finalUrl;
       link.download = `storymaker_${Date.now()}.mp3`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
 
-      showToast('✓ Audio synthesized at awtomatikong na-download!');
+      showToast(`✓ Matagumpay! Na-synthesize ang lahat ng ${valid.length} blocks!`);
     } catch (err: any) {
       showToast(`Error: ${err.message}`);
     } finally {
       setIsGenerating(false);
+      setProgressText('');
     }
   };
 
-  // Kukunin ang currently selected voice id para sa picker
   const currentPickingVoiceId =
     pickerTarget === 'bulk'
       ? bulkVoiceId
@@ -202,7 +216,6 @@ export const StudioView: React.FC<StudioViewProps> = ({
                       {idx + 1}
                     </span>
 
-                    {/* Speaker Tag Input */}
                     <input
                       type="text"
                       value={block.name}
@@ -211,7 +224,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
                       className="flex-1 min-w-0 bg-[#080d17] border border-[#222c42] rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#a354ff]"
                     />
 
-                    {/* 🎙️ CUSTOM VOICE SELECTOR PILL (May Play button & Modal trigger) */}
+                    {/* Voice Pill */}
                     <div className="flex-1 min-w-0 flex items-center gap-1.5">
                       <button
                         type="button"
@@ -231,7 +244,6 @@ export const StudioView: React.FC<StudioViewProps> = ({
                         <ChevronDown className="w-3.5 h-3.5 text-[#8f9bb5] flex-none" />
                       </button>
 
-                      {/* Mini Play Preview Button sa Block */}
                       {matchedVoice?.previewUrl && (
                         <button
                           type="button"
@@ -241,7 +253,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
                               ? 'bg-[#a354ff] text-white border-[#a354ff]'
                               : 'bg-[#12192a] hover:bg-[#1a233a] border-[#202a40] text-[#c29aff]'
                           }`}
-                          title="Listen to this voice sample"
+                          title="Pakinggan ang sample"
                         >
                           {playingPreviewUrl === matchedVoice.previewUrl ? (
                             <Pause className="w-3.5 h-3.5" />
@@ -292,7 +304,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
           </div>
         </div>
 
-        {/* Bulk Assignment with Custom Voice Picker */}
+        {/* Bulk Assignment */}
         <div className="bg-[#0d1220] border border-[#202a40] rounded-2xl p-5 space-y-3">
           <div className="flex items-center gap-2">
             <Users className="w-4 h-4 text-[#a354ff]" />
@@ -301,7 +313,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <input
               type="text"
-              placeholder="Target Tag (e.g. Narrator o blank)"
+              placeholder="Target Tag (e.g. DJ WARREN o blank)"
               value={bulkTag}
               onChange={(e) => setBulkTag(e.target.value)}
               className="bg-[#080d17] border border-[#222c42] rounded-xl px-3 py-2 text-xs text-white"
@@ -398,6 +410,25 @@ export const StudioView: React.FC<StudioViewProps> = ({
             />
           </div>
 
+          {/* 📊 LIVE PROGRESS BAR HABANG NAGGE-GENERATE */}
+          {isGenerating && (
+            <div className="p-3 bg-[#080d17] border border-[#202a40] rounded-xl space-y-2">
+              <div className="flex justify-between text-[11px] font-bold">
+                <span className="text-[#a354ff] flex items-center gap-1.5 truncate">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin flex-none" />
+                  {progressText}
+                </span>
+                <span className="font-mono text-white">{progressPercent}%</span>
+              </div>
+              <div className="w-full h-1.5 bg-[#19172e] rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-[#a354ff] to-[#4dd6a2] transition-all duration-300"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+            </div>
+          )}
+
           <button
             onClick={handleSynthesize}
             disabled={isGenerating}
@@ -406,7 +437,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
             {isGenerating ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Synthesizing & Stitching Audio...
+                Generating Multi-Speaker Audio...
               </>
             ) : (
               <>
@@ -434,7 +465,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
         </div>
       </div>
 
-      {/* 🚀 CUSTOM VOICE PICKER MODAL */}
+      {/* Voice Picker Modal */}
       <VoicePickerModal
         isOpen={pickerTarget !== null}
         onClose={() => setPickerTarget(null)}
