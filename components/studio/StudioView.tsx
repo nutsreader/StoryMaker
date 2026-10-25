@@ -11,17 +11,19 @@ import {
   CheckCircle,
   Loader2,
 } from 'lucide-react';
-import { Block } from '@/types';
+import { Block, VoiceItem } from '@/types';
 
 interface StudioViewProps {
   blocks: Block[];
   setBlocks: React.Dispatch<React.SetStateAction<Block[]>>;
+  voices: VoiceItem[]; // <-- Kukunin ang live list ng boses
   showToast: (msg: string) => void;
 }
 
 export const StudioView: React.FC<StudioViewProps> = ({
   blocks,
   setBlocks,
+  voices,
   showToast,
 }) => {
   // Bulk Assign
@@ -61,7 +63,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
 
   const applyBulkVoice = () => {
     if (!bulkVoiceId.trim()) {
-      showToast('Ilagay ang Voice ID na nais i-assign.');
+      showToast('Pumili ng boses sa dropdown muna.');
       return;
     }
     const tag = bulkTag.trim().toLowerCase();
@@ -75,14 +77,14 @@ export const StudioView: React.FC<StudioViewProps> = ({
         return b;
       })
     );
-    showToast(`Na-update ang ${count} speaker block(s)!`);
+    showToast(`Na-assign ang boses sa ${count} speaker block(s)!`);
   };
 
   const handleSynthesize = async () => {
     const valid = blocks.filter((b) => b.dialogue.trim() && b.voiceId.trim());
 
     if (valid.length === 0) {
-      showToast('Kailangan may Voice ID at Dialogue ang mga blocks.');
+      showToast('Pumili ng boses at maglagay ng dialogue sa blocks bago mag-synthesize.');
       return;
     }
 
@@ -133,13 +135,13 @@ export const StudioView: React.FC<StudioViewProps> = ({
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      {/* SCRIPT TURNS */}
+      {/* SCRIPT BLOCKS */}
       <div className="lg:col-span-2 space-y-4">
         <div className="bg-[#0d1220] border border-[#202a40] rounded-2xl p-5 shadow-sm">
           <div className="flex items-center justify-between pb-4 border-b border-[#202a40] mb-4">
             <div>
               <h2 className="text-sm font-bold">Dialogue Blocks</h2>
-              <p className="text-[11px] text-[#8f9bb5]">Mag-assign ng Voice ID sa bawat linya.</p>
+              <p className="text-[11px] text-[#8f9bb5]">Pumili ng boses sa dropdown para sa bawat linya.</p>
             </div>
             <span className="text-[11px] font-mono px-2.5 py-1 rounded-full bg-[#19172e] text-[#c29aff] border border-[#a354ff]/30">
               {blocks.length} BLOCKS
@@ -156,6 +158,8 @@ export const StudioView: React.FC<StudioViewProps> = ({
                   <span className="w-6 h-6 flex-none rounded-lg bg-[#2a1d42] text-[#d6b9ff] text-xs font-bold flex items-center justify-center font-mono">
                     {idx + 1}
                   </span>
+
+                  {/* Speaker Tag Input */}
                   <input
                     type="text"
                     value={block.name}
@@ -163,32 +167,52 @@ export const StudioView: React.FC<StudioViewProps> = ({
                     placeholder="Speaker Tag"
                     className="flex-1 min-w-0 bg-[#080d17] border border-[#222c42] rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#a354ff]"
                   />
+
+                  {/* 🎙️ VOICE DROPDOWN (Pinalitan ang raw ID input) */}
                   <div className="flex-1 min-w-0 flex items-center gap-1">
-                    <input
-                      type="text"
+                    <select
                       value={block.voiceId}
                       onChange={(e) => updateBlock(block.id, 'voiceId', e.target.value)}
-                      placeholder="Voice ID"
-                      className="w-full bg-[#080d17] border border-[#222c42] rounded-lg px-2.5 py-1.5 text-xs font-mono text-[#4dd6a2] focus:outline-none focus:border-[#a354ff]"
-                    />
+                      className="w-full bg-[#080d17] border border-[#222c42] rounded-lg px-2.5 py-1.5 text-xs text-[#4dd6a2] font-medium focus:outline-none focus:border-[#a354ff] truncate"
+                    >
+                      <option value="" className="text-[#8f9bb5]">
+                        Select voice
+                      </option>
+                      {voices.map((v) => (
+                        <option key={v.id} value={v.id} className="bg-[#0d1220] text-white">
+                          {v.name} {v.category ? `(${v.category})` : ''}
+                        </option>
+                      ))}
+                      {/* Fallback kung may Voice ID na wala sa dropdown list */}
+                      {block.voiceId && !voices.some((v) => v.id === block.voiceId) && (
+                        <option value={block.voiceId} className="bg-[#0d1220] text-[#4dd6a2]">
+                          Saved ID: {block.voiceId}
+                        </option>
+                      )}
+                    </select>
+
                     <button
                       onClick={() => {
-                        if (!block.voiceId) return;
+                        if (!block.voiceId) return showToast('Pumili muna ng boses');
                         navigator.clipboard.writeText(block.voiceId);
                         showToast('Voice ID copied');
                       }}
                       className="p-1.5 text-[#8f9bb5] hover:text-white bg-[#12192a] border border-[#202a40] rounded-lg"
+                      title="Copy raw Voice ID"
                     >
                       <Copy className="w-3.5 h-3.5" />
                     </button>
                   </div>
+
                   <button
                     onClick={() => removeBlock(block.id)}
                     className="p-1.5 text-red-400 hover:text-red-300 bg-[#12192a] border border-[#202a40] rounded-lg"
+                    title="Delete Block"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
+
                 <textarea
                   rows={2}
                   value={block.dialogue}
@@ -219,7 +243,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
           </div>
         </div>
 
-        {/* Bulk Assignment */}
+        {/* Bulk Assignment with Dropdown */}
         <div className="bg-[#0d1220] border border-[#202a40] rounded-2xl p-5 space-y-3">
           <div className="flex items-center gap-2">
             <Users className="w-4 h-4 text-[#a354ff]" />
@@ -228,29 +252,35 @@ export const StudioView: React.FC<StudioViewProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <input
               type="text"
-              placeholder="Target Speaker Tag (optional)"
+              placeholder="Target Tag (e.g. Narrator o blank)"
               value={bulkTag}
               onChange={(e) => setBulkTag(e.target.value)}
               className="bg-[#080d17] border border-[#222c42] rounded-xl px-3 py-2 text-xs text-white"
             />
-            <input
-              type="text"
-              placeholder="Bagong Voice ID"
+            {/* Dropdown din para sa Bulk Assignment */}
+            <select
               value={bulkVoiceId}
               onChange={(e) => setBulkVoiceId(e.target.value)}
-              className="bg-[#080d17] border border-[#222c42] rounded-xl px-3 py-2 text-xs font-mono text-white"
-            />
+              className="bg-[#080d17] border border-[#222c42] rounded-xl px-3 py-2 text-xs text-white"
+            >
+              <option value="">Select voice to bulk assign...</option>
+              {voices.map((v) => (
+                <option key={v.id} value={v.id} className="bg-[#0d1220] text-white">
+                  {v.name} {v.category ? `(${v.category})` : ''}
+                </option>
+              ))}
+            </select>
           </div>
           <button
             onClick={applyBulkVoice}
             className="w-full py-2 bg-[#11182a] hover:bg-[#1a233a] border border-[#202a40] rounded-xl text-xs font-bold text-white transition"
           >
-            Apply to Matching Speakers
+            I-apply sa tumutugmang speakers
           </button>
         </div>
       </div>
 
-      {/* AUDIO TUNING & SYNTHESIS */}
+      {/* Audio Tuning & Synthesize */}
       <div className="space-y-4">
         <div className="bg-[#0d1220] border border-[#202a40] rounded-2xl p-5 space-y-4">
           <h2 className="text-sm font-bold flex items-center gap-2 pb-3 border-b border-[#202a40]">

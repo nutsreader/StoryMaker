@@ -14,7 +14,7 @@ export default function StoryMakerPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   
-  // States
+  // Dynamic Studio States
   const [blocks, setBlocks] = useState < Block[] > ([
     { id: '1', name: 'Speaker 1', voiceId: '', dialogue: '' },
   ]);
@@ -23,14 +23,14 @@ export default function StoryMakerPage() {
   const [credits, setCredits] = useState < UserCredits | null > (null);
   const [loadingVoices, setLoadingVoices] = useState(false);
   
-  // Toast
+  // Toast Notification State
   const [toastMsg, setToastMsg] = useState < string | null > (null);
   const showToast = (msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 3000);
   };
   
-  // Fetch Credits
+  // 1. Fetch ElevenLabs Live Credits / Quota
   const fetchCredits = useCallback(() => {
     fetch('/api/user')
       .then((r) => r.json())
@@ -40,39 +40,64 @@ export default function StoryMakerPage() {
       .catch((e) => console.error('Credits fetch failed:', e));
   }, []);
   
-  // Initial Fetches
-  useEffect(() => {
-    fetchCredits();
-    
+  // 2. Fetch Live Voices mula sa ElevenLabs API
+  const fetchVoices = useCallback(() => {
     setLoadingVoices(true);
     fetch('/api/voices')
       .then((r) => r.json())
-      .then((d) => Array.isArray(d) && setVoices(d))
-      .catch((e) => console.error(e))
+      .then((d) => {
+        if (Array.isArray(d)) setVoices(d);
+      })
+      .catch((e) => console.error('Voices fetch failed:', e))
       .finally(() => setLoadingVoices(false));
-    
+  }, []);
+  
+  // 3. Fetch Presets mula sa Supabase
+  const fetchPresets = useCallback(() => {
     fetch('/api/presets')
       .then((r) => r.json())
-      .then((d) => Array.isArray(d) && setPresets(d))
-      .catch((e) => console.error(e));
-  }, [fetchCredits]);
+      .then((d) => {
+        if (Array.isArray(d)) setPresets(d);
+      })
+      .catch((e) => console.error('Presets fetch failed:', e));
+  }, []);
   
+  // Initial Data Loading on Mount
+  useEffect(() => {
+    fetchCredits();
+    fetchVoices();
+    fetchPresets();
+  }, [fetchCredits, fetchVoices, fetchPresets]);
+  
+  // I-save ang kasalukuyang Voice assignments sa Supabase
   const handleSavePresets = async () => {
     const valid = blocks.filter((b) => b.name.trim() && b.voiceId.trim());
-    if (valid.length === 0) return showToast('Walang valid presets na mase-save.');
-    for (const b of valid) {
-      await fetch('/api/presets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ speaker_name: b.name.trim(), voice_id: b.voiceId.trim() }),
-      });
+    if (valid.length === 0) {
+      showToast('Pumili ng boses sa blocks bago mag-save ng presets.');
+      return;
     }
-    showToast('✓ Na-save ang presets sa Supabase!');
+    
+    try {
+      for (const b of valid) {
+        await fetch('/api/presets', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            speaker_name: b.name.trim(),
+            voice_id: b.voiceId.trim(),
+          }),
+        });
+      }
+      fetchPresets();
+      showToast('✓ Na-save ang presets sa Supabase!');
+    } catch {
+      showToast('Nagka-problema sa pag-save ng presets.');
+    }
   };
   
   return (
     <div className="min-h-screen bg-[#080b13] text-[#eef1fb] flex">
-      {/* 1. SIDEBAR WITH CREDITS METER */}
+      {/* 1. SEPARATE SIDEBAR COMPONENT (May live meter at quota sa baba) */}
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -82,8 +107,9 @@ export default function StoryMakerPage() {
         credits={credits}
       />
 
+      {/* MAIN CONTENT AREA */}
       <main className="flex-1 min-w-0 flex flex-col">
-        {/* 2. TOPBAR WITH CREDITS BADGE (WALA NANG IMPORT BUTTON) */}
+        {/* 2. SEPARATE TOPBAR COMPONENT (May live Credits badge, walang kalat na import button) */}
         <Topbar
           onToggleMenu={() => setMobileMenuOpen(!mobileMenuOpen)}
           onSavePresets={handleSavePresets}
@@ -91,19 +117,20 @@ export default function StoryMakerPage() {
         />
 
         <div className="p-4 md:p-8 max-w-6xl mx-auto w-full">
-          {/* STUDIO VIEW */}
+          {/* 3. MULTI-SPEAKER STUDIO VIEW (Gamit ang Dropdown ng mga Boses) */}
           {activeTab === 'studio' && (
             <StudioView
               blocks={blocks}
               setBlocks={setBlocks}
+              voices={voices}
               showToast={(msg) => {
                 showToast(msg);
-                fetchCredits(); // Auto-update ng credits pagka-synthesize
+                fetchCredits(); // Awtomatikong mare-refresh ang credits matapos mag-synthesize
               }}
             />
           )}
 
-          {/* VOICE DIRECTORY */}
+          {/* 4. LIVE VOICE DIRECTORY VIEW */}
           {activeTab === 'voices' && (
             <VoiceDirectory
               voices={voices}
@@ -121,14 +148,14 @@ export default function StoryMakerPage() {
                   ]);
                 }
                 setActiveTab('studio');
-                showToast(`Nagamit ang Voice ID ni ${v.name}`);
+                showToast(`Nagamit ang boses ni ${v.name}`);
               }}
             />
           )}
         </div>
       </main>
 
-      {/* SCRIPT IMPORT MODAL */}
+      {/* 5. SCRIPT IMPORT MODAL (May Auto-Format at SFX Tag preservation) */}
       <ScriptImportModal
         isOpen={isImportOpen}
         onClose={() => setIsImportOpen(false)}
@@ -137,16 +164,16 @@ export default function StoryMakerPage() {
         showToast={showToast}
       />
 
-      {/* FLOATING ACTION BUTTON (FAB) PARA SA IMPORT */}
+      {/* 6. FLOATING ACTION BUTTON (FAB) PARA SA SCRIPT IMPORT */}
       <button
         onClick={() => setIsImportOpen(true)}
         className="fixed bottom-6 right-6 z-40 p-3.5 rounded-2xl bg-gradient-to-tr from-[#a354ff] to-[#685cff] text-white shadow-xl shadow-purple-500/30 flex items-center justify-center hover:scale-105 active:scale-95 transition"
-        title="Import / Paste Script"
+        title="Import Script (.txt o Paste)"
       >
         <Upload className="w-6 h-6" />
       </button>
 
-      {/* TOAST */}
+      {/* 7. TOAST NOTIFICATION POPUP */}
       {toastMsg && (
         <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 bg-[#eef1fb] text-[#111523] px-4 py-2.5 rounded-xl text-xs font-bold shadow-2xl flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-[#a354ff]" />
