@@ -1,49 +1,53 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { FileText, X, Sparkles, Check } from 'lucide-react';
-import { Block, PresetItem } from '@/types';
+import { FileText, X, Sparkles, Check, Users } from 'lucide-react';
+import { Block, PresetItem, VoiceItem } from '@/types';
 
 interface ScriptImportModalProps {
   isOpen: boolean;
   onClose: () => void;
   presets: PresetItem[];
+  voices: VoiceItem[]; // <-- Kukunin ang listahan ng live boses
   onApplyBlocks: (blocks: Block[]) => void;
   showToast: (msg: string) => void;
 }
 
-// Mga tags na DAPAT HINDI maging speaker name (mga SFX at stage directions)
 const SFX_TAG_REGEX = /^(sfx|sound|music|bgm|scene|fx|ambient|ambience|audio|effect|pause|cut)\b/i;
 
-export const ScriptImportModal: React.FC < ScriptImportModalProps > = ({
+export const ScriptImportModal: React.FC<ScriptImportModalProps> = ({
   isOpen,
   onClose,
   presets,
+  voices,
   onApplyBlocks,
   showToast,
 }) => {
   const [scriptText, setScriptText] = useState('');
   const [fileName, setFileName] = useState('');
   const [statusMessage, setStatusMessage] = useState('');
-  const fileInputRef = useRef < HTMLInputElement > (null);
   
+  // 👥 Natukoy na unique characters at ang kanilang assigned voices
+  const [detectedCharacters, setDetectedCharacters] = useState<{ name: string; count: number }[]>([]);
+  const [charVoiceMap, setCharVoiceMap] = useState<Record<string, string>>({});
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   if (!isOpen) return null;
-  
-  // 🧠 SMART PARSER ENGINE: Hihiwalayin ang Speaker sa SFX at Dialogue
+
+  // Smart Parser
   const parseScriptLines = (raw: string) => {
     const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-    const parsed: { name: string;dialogue: string } [] = [];
-    let currentBlock: { name: string;dialogue: string } | null = null;
-    
+    const parsed: { name: string; dialogue: string }[] = [];
+    let currentBlock: { name: string; dialogue: string } | null = null;
+
     for (const line of lines) {
-      // 1. I-check kung nagsisimula sa bracket: [DJ CARLO] o [NARRATOR]
       const bracketMatch = line.match(/^\[([^\]]+)\]\s*:?\s*(.*)$/);
-      
+
       if (bracketMatch) {
         const potentialTag = bracketMatch[1].trim();
         const restOfLine = bracketMatch[2].trim();
-        
-        // Kung ang nasa bracket ay [SFX: ...] o [MUSIC: ...], DIRECTION ito, HINDI speaker!
+
         if (SFX_TAG_REGEX.test(potentialTag)) {
           if (currentBlock) {
             currentBlock.dialogue += ` [${potentialTag}] ${restOfLine}`.trim();
@@ -53,8 +57,7 @@ export const ScriptImportModal: React.FC < ScriptImportModalProps > = ({
           }
           continue;
         }
-        
-        // Tunay na Speaker ito (e.g. [DJ CARLO], [NARRATOR], [PAUL])
+
         currentBlock = {
           name: potentialTag.toUpperCase(),
           dialogue: restOfLine,
@@ -62,8 +65,7 @@ export const ScriptImportModal: React.FC < ScriptImportModalProps > = ({
         parsed.push(currentBlock);
         continue;
       }
-      
-      // 2. I-check kung standard format: DJ CARLO: "dialogue..."
+
       const colonMatch = line.match(/^([A-Za-z0-9 _.'-]{1,35})\s*:\s*(.+)$/);
       if (colonMatch && !SFX_TAG_REGEX.test(colonMatch[1])) {
         currentBlock = {
@@ -73,8 +75,7 @@ export const ScriptImportModal: React.FC < ScriptImportModalProps > = ({
         parsed.push(currentBlock);
         continue;
       }
-      
-      // 3. Karugtong na linya o plain narration
+
       if (currentBlock) {
         currentBlock.dialogue += (currentBlock.dialogue ? ' ' : '') + line;
       } else {
@@ -82,73 +83,91 @@ export const ScriptImportModal: React.FC < ScriptImportModalProps > = ({
         parsed.push(currentBlock);
       }
     }
-    
+
     return parsed.filter((p) => p.dialogue.trim());
   };
-  
-  // ✦ ACTION 1: AUTO-FORMAT BUTTON
+
+  // ✦ AUTO-FORMAT: Kukunin ang unique characters at gagawa ng cards
   const handleAutoFormat = () => {
     if (!scriptText.trim()) {
-      setStatusMessage('Mag-upload ng .txt o mag-paste muna ng script.');
+      setStatusMessage('Mag-upload o mag-paste muna ng script.');
       return;
     }
-    
+
     const parsed = parseScriptLines(scriptText);
     if (parsed.length === 0) {
       setStatusMessage('Walang natukoy na dialogue.');
       return;
     }
-    
-    // Aayusin ang text sa loob ng Preview box para kitang-kita ang format
-    const formattedPreview = parsed
-      .map((p) => `[${p.name}]\n${p.dialogue}`)
-      .join('\n\n');
-    
-    setScriptText(formattedPreview);
-    
-    // Kukunin ang listahan ng unique speakers
-    const uniqueSpeakers = Array.from(new Set(parsed.map((p) => p.name)));
+
+    // Bilangin kung ilang beses nagsasalita ang bawat character
+    const counts: Record<string, number> = {};
+    parsed.forEach((p) => {
+      counts[p.name] = (counts[p.name] || 0) + 1;
+    });
+
+    const charactersList = Object.keys(counts).map((name) => ({
+      name,
+      count: counts[name],
+    }));
+
+    setDetectedCharacters(charactersList);
+
+    // Kusa nang ikabit ang Voice ID kung may kaparehong pangalan sa Supabase presets
+    const initialMap: Record<string, string> = { ...charVoiceMap };
+    charactersList.forEach((char) => {
+      if (!initialMap[char.name]) {
+        const match = presets.find(
+          (p) => p.speaker_name.toUpperCase() === char.name.toUpperCase()
+        );
+        if (match) initialMap[char.name] = match.voice_id;
+      }
+    });
+    setCharVoiceMap(initialMap);
+
+    // I-format ang preview text
+    const formatted = parsed.map((p) => `[${p.name}]\n${p.dialogue}`).join('\n\n');
+    setScriptText(formatted);
+
     setStatusMessage(
-      `✓ Natukoy ang ${parsed.length} dialogue turns mula sa (${uniqueSpeakers.join(', ')}). Pindutin ang "Apply to Studio".`
+      `✓ Natukoy ang ${parsed.length} blocks mula sa ${charactersList.length} unique character(s). Piliin ang boses sa cards sa ibaba!`
     );
-    showToast('Auto-Format complete!');
+    showToast('Characters detected!');
   };
-  
-  // 🚀 ACTION 2: APPLY TO STUDIO BUTTON
+
+  // 🚀 APPLY TO STUDIO: I-a-apply ang napiling boses sa lahat ng turns ng karakter
   const handleApplyToStudio = () => {
     if (!scriptText.trim()) {
       setStatusMessage('Mag-paste o mag-load muna ng script.');
       return;
     }
-    
+
     const parsed = parseScriptLines(scriptText);
     if (parsed.length === 0) {
       setStatusMessage('Walang dialogue na mai-a-apply.');
       return;
     }
-    
-    // Ikakabit ang mga boses mula sa Supabase presets kung may kaparehong pangalan
+
     const finalBlocks: Block[] = parsed.map((item, index) => {
-      const match = presets.find(
-        (p) => p.speaker_name.toUpperCase() === item.name.toUpperCase()
-      );
-      
+      // Kunin ang boses mula sa character voice mapping card
+      const assignedVoiceId = charVoiceMap[item.name] || '';
+
       return {
         id: (Date.now() + index).toString(),
         name: item.name,
-        voiceId: match ? match.voice_id : '',
+        voiceId: assignedVoiceId,
         dialogue: item.dialogue,
       };
     });
-    
+
     onApplyBlocks(finalBlocks);
     onClose();
-    showToast(`✓ Na-apply ang ${finalBlocks.length} dialogue blocks sa Studio!`);
+    showToast(`✓ Na-apply ang ${finalBlocks.length} blocks kasama ang boses ng bawat karakter!`);
   };
-  
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="w-full max-w-xl bg-[#0b101d] border border-[#252e44] rounded-2xl p-5 md:p-6 space-y-4 shadow-2xl">
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 md:p-4">
+      <div className="w-full max-w-2xl bg-[#0b101d] border border-[#252e44] rounded-2xl p-5 md:p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-[#202a40]">
           <div className="flex items-center gap-2.5">
@@ -156,9 +175,9 @@ export const ScriptImportModal: React.FC < ScriptImportModalProps > = ({
               <FileText className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white">Import Script (.txt)</h3>
+              <h3 className="text-sm font-bold text-white">Import Script & Bulk Character Voices</h3>
               <p className="text-[10px] text-[#8f9bb5]">
-                Load and preview your story lines before converting to speakers.
+                Auto-detect characters at i-assign ang boses ng bawat isa nang minsanan.
               </p>
             </div>
           </div>
@@ -169,7 +188,7 @@ export const ScriptImportModal: React.FC < ScriptImportModalProps > = ({
 
         {/* File Picker */}
         <div>
-          <label className="text-[10px] font-bold text-[#8f9bb5] tracking-wider block mb-1.5">
+          <label className="text-[10px] font-bold text-[#8f9bb5] tracking-wider block mb-1">
             SELECT TEXT FILE
           </label>
           <div className="flex items-center gap-3 p-2 bg-[#080d17] border border-[#222c42] rounded-xl">
@@ -200,16 +219,16 @@ export const ScriptImportModal: React.FC < ScriptImportModalProps > = ({
           </div>
         </div>
 
-        {/* Script Preview / Editor Textarea */}
+        {/* Script Preview / Editor */}
         <div>
-          <label className="text-[10px] font-bold text-[#8f9bb5] tracking-wider block mb-1.5">
+          <label className="text-[10px] font-bold text-[#8f9bb5] tracking-wider block mb-1">
             SCRIPT PREVIEW / EDITOR
           </label>
           <textarea
-            rows={8}
+            rows={6}
             value={scriptText}
             onChange={(e) => setScriptText(e.target.value)}
-            placeholder={`I-paste dito ang raw script lines tulad nito:\n\n[DJ CARLO] [SFX: Mic click] "Magandang hatinggabi..."\n[NARRATOR] [SFX: Piano starts] "Tahimik ang gabi..."\n[PAUL]: [SFX: Flashlight click] "Ang tahimik dito..."`}
+            placeholder="I-paste dito ang script..."
             className="w-full bg-[#080d17] border border-[#222c42] rounded-xl p-3 text-xs text-white leading-relaxed focus:outline-none focus:border-[#a354ff] font-mono resize-y"
           />
           {statusMessage && (
@@ -219,7 +238,59 @@ export const ScriptImportModal: React.FC < ScriptImportModalProps > = ({
           )}
         </div>
 
-        {/* Modal Buttons (Eksaktong tulad ng nasa screenshot) */}
+        {/* 🎭 BAGONG CARDS: CHARACTER VOICE BULK ASSIGNMENT */}
+        {detectedCharacters.length > 0 && (
+          <div className="p-3.5 bg-[#080d17] border border-[#202a40] rounded-xl space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-white">
+                <Users className="w-4 h-4 text-[#a354ff]" />
+                <span>NATUKOY NA CHARACTERS ({detectedCharacters.length})</span>
+              </div>
+              <span className="text-[10px] text-[#4dd6a2]">
+                Isang pili lang, automatic ia-apply sa lahat ng linya nila
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-52 overflow-y-auto pr-1">
+              {detectedCharacters.map((char) => (
+                <div
+                  key={char.name}
+                  className="p-3 bg-[#0d1220] border border-[#202a40] rounded-xl flex items-center justify-between gap-2"
+                >
+                  <div className="min-w-0 flex-1">
+                    <span className="text-xs font-bold text-white block truncate">
+                      {char.name}
+                    </span>
+                    <span className="text-[10px] text-[#8f9bb5] font-mono">
+                      {char.count} lines / dialogue turns
+                    </span>
+                  </div>
+
+                  {/* Dropdown ng boses para sa karakter na ito */}
+                  <select
+                    value={charVoiceMap[char.name] || ''}
+                    onChange={(e) =>
+                      setCharVoiceMap((prev) => ({
+                        ...prev,
+                        [char.name]: e.target.value,
+                      }))
+                    }
+                    className="max-w-[150px] bg-[#080d17] border border-[#222c42] rounded-lg px-2.5 py-1.5 text-xs text-[#4dd6a2] font-semibold focus:outline-none focus:border-[#a354ff] truncate"
+                  >
+                    <option value="">Select voice...</option>
+                    {voices.map((v) => (
+                      <option key={v.id} value={v.id} className="bg-[#0d1220] text-white">
+                        {v.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Footer Actions */}
         <div className="flex items-center justify-between pt-3 border-t border-[#202a40]">
           <button
             onClick={handleAutoFormat}

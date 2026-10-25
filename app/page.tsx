@@ -14,7 +14,7 @@ export default function StoryMakerPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   
-  // Dynamic Studio States
+  // Dynamic States
   const [blocks, setBlocks] = useState < Block[] > ([
     { id: '1', name: 'Speaker 1', voiceId: '', dialogue: '' },
   ]);
@@ -23,7 +23,7 @@ export default function StoryMakerPage() {
   const [credits, setCredits] = useState < UserCredits | null > (null);
   const [loadingVoices, setLoadingVoices] = useState(false);
   
-  // Toast Notification State
+  // Toast State
   const [toastMsg, setToastMsg] = useState < string | null > (null);
   const showToast = (msg: string) => {
     setToastMsg(msg);
@@ -40,7 +40,7 @@ export default function StoryMakerPage() {
       .catch((e) => console.error('Credits fetch failed:', e));
   }, []);
   
-  // 2. Fetch Live Voices mula sa ElevenLabs API
+  // 2. Fetch Live Voices mula sa ElevenLabs
   const fetchVoices = useCallback(() => {
     setLoadingVoices(true);
     fetch('/api/voices')
@@ -62,7 +62,7 @@ export default function StoryMakerPage() {
       .catch((e) => console.error('Presets fetch failed:', e));
   }, []);
   
-  // Initial Data Loading on Mount
+  // Initial Data Fetching on mount
   useEffect(() => {
     fetchCredits();
     fetchVoices();
@@ -97,7 +97,7 @@ export default function StoryMakerPage() {
   
   return (
     <div className="min-h-screen bg-[#080b13] text-[#eef1fb] flex">
-      {/* 1. SEPARATE SIDEBAR COMPONENT (May live meter at quota sa baba) */}
+      {/* 1. SIDEBAR (May live meter at quota sa ibaba) */}
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -107,9 +107,9 @@ export default function StoryMakerPage() {
         credits={credits}
       />
 
-      {/* MAIN CONTENT AREA */}
+      {/* MAIN VIEWPORT */}
       <main className="flex-1 min-w-0 flex flex-col">
-        {/* 2. SEPARATE TOPBAR COMPONENT (May live Credits badge, walang kalat na import button) */}
+        {/* 2. TOPBAR (May live Credits display, walang duplicate na import button) */}
         <Topbar
           onToggleMenu={() => setMobileMenuOpen(!mobileMenuOpen)}
           onSavePresets={handleSavePresets}
@@ -117,7 +117,7 @@ export default function StoryMakerPage() {
         />
 
         <div className="p-4 md:p-8 max-w-6xl mx-auto w-full">
-          {/* 3. MULTI-SPEAKER STUDIO VIEW (Gamit ang Dropdown ng mga Boses) */}
+          {/* 3. MULTI-SPEAKER STUDIO VIEW */}
           {activeTab === 'studio' && (
             <StudioView
               blocks={blocks}
@@ -125,7 +125,7 @@ export default function StoryMakerPage() {
               voices={voices}
               showToast={(msg) => {
                 showToast(msg);
-                fetchCredits(); // Awtomatikong mare-refresh ang credits matapos mag-synthesize
+                fetchCredits(); // Awtomatikong mare-refresh ang credits matapos mag-generate ng audio
               }}
             />
           )}
@@ -155,11 +155,12 @@ export default function StoryMakerPage() {
         </div>
       </main>
 
-      {/* 5. SCRIPT IMPORT MODAL (May Auto-Format at SFX Tag preservation) */}
+      {/* 5. SCRIPT IMPORT MODAL (May Character Cards Bulk Voice Mapping) */}
       <ScriptImportModal
         isOpen={isImportOpen}
         onClose={() => setIsImportOpen(false)}
         presets={presets}
+        voices={voices}
         onApplyBlocks={(newBlocks) => setBlocks(newBlocks)}
         showToast={showToast}
       />
@@ -173,7 +174,7 @@ export default function StoryMakerPage() {
         <Upload className="w-6 h-6" />
       </button>
 
-      {/* 7. TOAST NOTIFICATION POPUP */}
+      {/* 7. TOAST NOTIFICATION */}
       {toastMsg && (
         <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 bg-[#eef1fb] text-[#111523] px-4 py-2.5 rounded-xl text-xs font-bold shadow-2xl flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-[#a354ff]" />
