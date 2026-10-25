@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Sliders, Volume2, X } from 'lucide-react';
+import { Sliders, Volume2, History, X } from 'lucide-react';
 import { ActiveTab, UserCredits } from '@/types';
 
 interface SidebarProps {
@@ -21,8 +21,9 @@ export const Sidebar: React.FC < SidebarProps > = ({
   voiceCount,
   credits,
 }) => {
-  // Compute percentage used
-  const percentUsed = credits && credits.character_limit > 0 ?
+  // Percentage ng nagamit na credits para sa meter bar
+  const percentUsed =
+    credits && credits.character_limit > 0 ?
     Math.min(100, (credits.character_count / credits.character_limit) * 100) :
     0;
   
@@ -43,17 +44,18 @@ export const Sidebar: React.FC < SidebarProps > = ({
           </div>
           <button
             onClick={() => setIsOpen(false)}
-            className="md:hidden text-[#8f9bb5] hover:text-white"
+            className="md:hidden text-[#8f9bb5] hover:text-white p-1"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Workspace Nav */}
+        {/* Workspace Navigation */}
         <div className="text-[10px] font-bold text-[#77839c] tracking-widest px-3 mb-2">
           WORKSPACE
         </div>
         <nav className="space-y-1">
+          {/* 1. Multi-Speaker Studio */}
           <button
             onClick={() => {
               setActiveTab('studio');
@@ -67,6 +69,8 @@ export const Sidebar: React.FC < SidebarProps > = ({
           >
             <Sliders className="w-4 h-4" /> Multi-Speaker Studio
           </button>
+
+          {/* 2. Live Voices */}
           <button
             onClick={() => {
               setActiveTab('voices');
@@ -81,10 +85,25 @@ export const Sidebar: React.FC < SidebarProps > = ({
             <Volume2 className="w-4 h-4" /> Live Voices{' '}
             {voiceCount > 0 && `(${voiceCount})`}
           </button>
+
+          {/* 3. Audio History (Dito mada-download ang nagawa kanina) */}
+          <button
+            onClick={() => {
+              setActiveTab('history');
+              setIsOpen(false);
+            }}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition ${
+              activeTab === 'history'
+                ? 'bg-[#19172e] text-[#c29aff] border border-[#a354ff]/30'
+                : 'text-[#8f9bb5] hover:bg-[#11182a] hover:text-[#eef1fb]'
+            }`}
+          >
+            <History className="w-4 h-4" /> Audio History
+          </button>
         </nav>
       </div>
 
-      {/* 📊 TOTAL CREDITS & QUOTA CARD SA BABA NG SIDEBAR */}
+      {/* 📊 TOTAL CREDITS & QUOTA METER SA BABA */}
       <div className="p-4 bg-[#0d1220] border border-[#202a40] rounded-2xl space-y-2.5">
         <div className="flex items-center justify-between text-[11px]">
           <span className="font-bold text-[#8f9bb5]">Plan Tier:</span>
@@ -103,7 +122,7 @@ export const Sidebar: React.FC < SidebarProps > = ({
             </span>
           </div>
 
-          {/* Meter progress bar */}
+          {/* Progress Bar */}
           <div className="w-full h-1.5 bg-[#20283b] rounded-full overflow-hidden">
             <div
               className="h-full bg-gradient-to-r from-[#a354ff] to-[#685cff] transition-all duration-300"

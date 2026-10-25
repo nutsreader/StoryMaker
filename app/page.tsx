@@ -7,6 +7,7 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { Topbar } from '@/components/layout/Topbar';
 import { StudioView } from '@/components/studio/StudioView';
 import { VoiceDirectory } from '@/components/voices/VoiceDirectory';
+import { HistoryView } from '@/components/history/HistoryView';
 import { ScriptImportModal } from '@/components/studio/ScriptImportModal';
 
 export default function StoryMakerPage() {
@@ -14,7 +15,7 @@ export default function StoryMakerPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   
-  // Dynamic States
+  // Studio States
   const [blocks, setBlocks] = useState < Block[] > ([
     { id: '1', name: 'Speaker 1', voiceId: '', dialogue: '' },
   ]);
@@ -97,7 +98,7 @@ export default function StoryMakerPage() {
   
   return (
     <div className="min-h-screen bg-[#080b13] text-[#eef1fb] flex">
-      {/* 1. SIDEBAR (May live meter at quota sa ibaba) */}
+      {/* 1. SEPARATE SIDEBAR (Studio, Voices, History, Credits Meter) */}
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -109,7 +110,7 @@ export default function StoryMakerPage() {
 
       {/* MAIN VIEWPORT */}
       <main className="flex-1 min-w-0 flex flex-col">
-        {/* 2. TOPBAR (May live Credits display, walang duplicate na import button) */}
+        {/* 2. TOPBAR (May Credits Badge) */}
         <Topbar
           onToggleMenu={() => setMobileMenuOpen(!mobileMenuOpen)}
           onSavePresets={handleSavePresets}
@@ -117,7 +118,7 @@ export default function StoryMakerPage() {
         />
 
         <div className="p-4 md:p-8 max-w-6xl mx-auto w-full">
-          {/* 3. MULTI-SPEAKER STUDIO VIEW */}
+          {/* TAB 1: MULTI-SPEAKER STUDIO */}
           {activeTab === 'studio' && (
             <StudioView
               blocks={blocks}
@@ -125,12 +126,12 @@ export default function StoryMakerPage() {
               voices={voices}
               showToast={(msg) => {
                 showToast(msg);
-                fetchCredits(); // Awtomatikong mare-refresh ang credits matapos mag-generate ng audio
+                fetchCredits(); // Mare-refresh ang credits matapos mag-generate
               }}
             />
           )}
 
-          {/* 4. LIVE VOICE DIRECTORY VIEW */}
+          {/* TAB 2: LIVE VOICE DIRECTORY */}
           {activeTab === 'voices' && (
             <VoiceDirectory
               voices={voices}
@@ -152,10 +153,13 @@ export default function StoryMakerPage() {
               }}
             />
           )}
+
+          {/* TAB 3: AUDIO HISTORY (Dito kukunin ang na-generate nang audio) */}
+          {activeTab === 'history' && <HistoryView />}
         </div>
       </main>
 
-      {/* 5. SCRIPT IMPORT MODAL (May Character Cards Bulk Voice Mapping) */}
+      {/* SCRIPT IMPORT MODAL (May Character Voice Mapping Cards) */}
       <ScriptImportModal
         isOpen={isImportOpen}
         onClose={() => setIsImportOpen(false)}
@@ -165,7 +169,7 @@ export default function StoryMakerPage() {
         showToast={showToast}
       />
 
-      {/* 6. FLOATING ACTION BUTTON (FAB) PARA SA SCRIPT IMPORT */}
+      {/* FLOATING ACTION BUTTON (FAB) PARA SA SCRIPT IMPORT */}
       <button
         onClick={() => setIsImportOpen(true)}
         className="fixed bottom-6 right-6 z-40 p-3.5 rounded-2xl bg-gradient-to-tr from-[#a354ff] to-[#685cff] text-white shadow-xl shadow-purple-500/30 flex items-center justify-center hover:scale-105 active:scale-95 transition"
@@ -174,7 +178,7 @@ export default function StoryMakerPage() {
         <Upload className="w-6 h-6" />
       </button>
 
-      {/* 7. TOAST NOTIFICATION */}
+      {/* TOAST NOTIFICATION */}
       {toastMsg && (
         <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 bg-[#eef1fb] text-[#111523] px-4 py-2.5 rounded-xl text-xs font-bold shadow-2xl flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-[#a354ff]" />
